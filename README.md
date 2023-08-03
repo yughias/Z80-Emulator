@@ -1,6 +1,6 @@
 # Z80-Emulator
 
-This is a simple Z80 emulator written purely in C that pass the following text:
+This is a simple Z80 emulator written purely in C that pass the following tests:
 - prelim.com
 - zexdoc.cim
 - zexall.com
