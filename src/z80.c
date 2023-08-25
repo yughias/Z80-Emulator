@@ -1012,9 +1012,9 @@ void stepCPU(z80_t* z80){
                     break;
                     
                     case 3:
-                    val8 = *z80->readMemory(*z80->PC+1);
+                    val16 = (*z80->A << 8) | *z80->readMemory(*z80->PC+1);
                     *z80->PC += 2;
-                    OPCODE_IN(z80, z80->A, val8);
+                    OPCODE_IN(z80, z80->A, val16);
                     z80->cycles += 11;
                     break;
 
