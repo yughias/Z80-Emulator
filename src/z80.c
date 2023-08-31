@@ -287,6 +287,9 @@ void stepCPU(z80_t* z80){
         z80->cycles += 1;
         return;
     }
+
+    // increase 7 bits of R register
+    *z80->R = ((*z80->R + 1) & 0x7F) | (*z80->R & 0x80);
         
     #ifdef DEBUG
         infoCPU(z80);
