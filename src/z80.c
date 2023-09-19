@@ -430,13 +430,11 @@ void stepCPU(z80_t* z80){
                     OPCODE_IN(z80, r[y], *z80->BC);
                     setSign8Bit(z80, *r[y]);
                     setParity(z80, *r[y]);
-                    setSign8Bit(z80, *r[y]);
                 } else {
                     uint8_t copy = *z80->A;
                     OPCODE_IN(z80, z80->A, *z80->BC);
                     setSign8Bit(z80, *z80->A);
                     setParity(z80, *z80->A);
-                    setSign8Bit(z80, *z80->A);
                     *z80->A = copy;
                 }
                 z80->cycles += 12;
