@@ -4,7 +4,6 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-typedef struct z80_t z80_t;
 typedef uint8_t* (*busFunc)(uint16_t);
 
 typedef struct z80_t {
