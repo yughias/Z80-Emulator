@@ -19,20 +19,20 @@ void freeMemory(){
     free(MEMORY);
 }
 
-uint8_t* getReadAddress(uint16_t address){
-    return MEMORY + address;
+uint8_t readMemory(uint16_t addr){
+    return MEMORY[addr];
 }
 
-uint8_t* getWriteAddress(uint16_t address){
-    return MEMORY + address;
+void writeMemory(uint16_t addr, uint8_t val){
+    MEMORY[addr] = val;
 }
 
-uint8_t* getReadIO(uint16_t address){
-    return IO;
+uint8_t readIO(uint16_t addr){
+    return IO[0];
 }
 
-uint8_t* getWriteIO(uint16_t address){
-    return IO;
+void writeIO(uint16_t addr, uint8_t val){
+    IO[0] = val;
 }
 
 void loadROM(const char* filename){

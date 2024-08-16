@@ -1,6 +1,6 @@
 # Z80-Emulator
 
-This is a simple Z80 emulator written purely in C that pass the following tests:
+This is a simple Z80 emulator written purely in C that passes the following tests:
 - prelim.com
 - zexdoc.cim
 - zexall.com
@@ -15,10 +15,14 @@ z80_t cpu {
     .writeIO = write_io_func
 };
 ```
-Every read/write function in the memory/IO bus must have the following signature:
+Every read function in the memory/IO bus must have the following signature:
 
 ```c
-uint8_t* access_bus(uint16_t address);
+uint8_t read_byte(uint16_t address);
 ```
 
-This function must return a pointer to the adress accessed during a read/write operation.
+Every write function in the memory/IO bus must have the following signature:
+
+```c
+void access_bus(uint16_t address, uint8_t byte);
+```

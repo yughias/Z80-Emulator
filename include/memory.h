@@ -17,9 +17,10 @@ void initMemory();
 void loadROM(const char*);
 void freeMemory();
 
-uint8_t* getReadAddress(uint16_t);
-uint8_t* getWriteAddress(uint16_t);
-uint8_t* getReadIO(uint16_t);
-uint8_t* getWriteIO(uint16_t);
+uint8_t readMemory(uint16_t);
+void writeMemory(uint16_t, uint8_t);
+uint8_t readIO(uint16_t);
+void writeIO(uint16_t, uint8_t);
+
 
 #endif

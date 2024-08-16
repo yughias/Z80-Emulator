@@ -51,8 +51,6 @@ void JPPO(z80_t*, uint16_t);
 void JPPE(z80_t*, uint16_t);
 void JPP(z80_t*, uint16_t);
 void JPM(z80_t*, uint16_t);
-void OPCODE_OUT(z80_t*, uint8_t, uint16_t);
-void OPCODE_IN(z80_t*, uint8_t*, uint16_t);
 void EI(z80_t*);
 void DI(z80_t*);
 void CALL(z80_t*, uint16_t);
@@ -137,9 +135,9 @@ void OTDR(z80_t*);
 #define CLEAR_N 0b11111101
 #define CLEAR_C 0b11111110
 
-#define SET_FLAG(f)          *z80->F |= SET_ ## f
-#define CLEAR_FLAG(f)        *z80->F &= CLEAR_ ## f
-#define CHANGE_FLAG(f, val)  *z80->F ^= (-!!(val) ^ *z80->F) & SET_ ## f
+#define SET_FLAG(f)          z80->F |= SET_ ## f
+#define CLEAR_FLAG(f)        z80->F &= CLEAR_ ## f
+#define CHANGE_FLAG(f, val)  z80->F ^= (-!!(val) ^ z80->F) & SET_ ## f
 
 // cpu utility function
 void setParity(z80_t*, uint8_t);
@@ -148,34 +146,23 @@ void setSign8Bit(z80_t*, uint8_t);
 void setSign16Bit(z80_t*, uint16_t);
 bool calculateCarry(int, uint16_t, uint16_t, bool);
 
-void initCPU(z80_t* z80){
-    z80->cycles += 0;
-    z80->F = (uint8_t*)z80->AF;
-    z80->A = z80->F + 1;
-    z80->C = (uint8_t*)z80->BC;
-    z80->B = z80->C + 1;
-    z80->E = (uint8_t*)z80->DE;
-    z80->D = z80->E + 1;
-    z80->L = (uint8_t*)z80->HL;
-    z80->H = z80->L + 1;
-    z80->IXL = (uint8_t*)z80->IX;
-    z80->IXH = z80->IXL + 1;
-    z80->IYL = (uint8_t*)z80->IY;
-    z80->IYH = z80->IYL + 1;
- 
-    *z80->AF = 0xFFFF;
-    *z80->BC = 0;
-    *z80->DE = 0;
-    *z80->HL = 0;
-    *z80->SP = 0xFFFF;
-    *z80->PC = 0;
+uint16_t readHalfWord(z80_t*, uint16_t);
+void writeHalfWord(z80_t*, uint16_t, uint16_t);
 
-    *z80->AF_ = 0;
-    *z80->BC_ = 0;
-    *z80->DE_ = 0;
-    *z80->HL_ = 0;
-    *z80->I = 0;
-    *z80->R = 0;
+void initCPU(z80_t* z80){
+    z80->AF = 0xFFFF;
+    z80->BC = 0;
+    z80->DE = 0;
+    z80->HL = 0;
+    z80->SP = 0xFFFF;
+    z80->PC = 0;
+
+    z80->AF_ = 0;
+    z80->BC_ = 0;
+    z80->DE_ = 0;
+    z80->HL_ = 0;
+    z80->I = 0;
+    z80->R = 0;
     z80->HALTED = false;
     z80->INTERRUPT_MODE    = 1;
     z80->INTERRUPT_ENABLED = false;
@@ -185,76 +172,56 @@ void initCPU(z80_t* z80){
 }
 
 void restoreRegisterTable(z80_t* z80, uint8_t** r, uint16_t** rp, uint16_t** rp2){
-    r[0] = z80->B;
-    r[1] = z80->C;
-    r[2] = z80->D;
-    r[3] = z80->E;
-    r[4] = z80->H;
-    r[5] = z80->L;
-    r[6] = (uint8_t*)(uintptr_t)*z80->HL;
-    r[7] = z80->A;
-    rp[0] = z80->BC;
-    rp[1] = z80->DE;
-    rp[2] = z80->HL;
-    rp[3] = z80->SP;
-    rp2[0] = z80->BC;
-    rp2[1] = z80->DE;
-    rp2[2] = z80->HL;
-    rp2[3] = z80->AF;
+    r[0] = &z80->B;
+    r[1] = &z80->C;
+    r[2] = &z80->D;
+    r[3] = &z80->E;
+    r[4] = &z80->H;
+    r[5] = &z80->L;
+    r[6] = &z80->aux_reg;
+    r[7] = &z80->A;
+    rp[0] = &z80->BC;
+    rp[1] = &z80->DE;
+    rp[2] = &z80->HL;
+    rp[3] = &z80->SP;
+    rp2[0] = &z80->BC;
+    rp2[1] = &z80->DE;
+    rp2[2] = &z80->HL;
+    rp2[3] = &z80->AF;
 }
 
 void useDDRegisterTable(z80_t* z80, uint8_t** r, uint16_t** rp, uint16_t** rp2){
-    r[4] = z80->IXH;
-    r[5] = z80->IXL;
-    r[6] = (uint8_t*)(uintptr_t)( *z80->IX + (int8_t)*z80->readMemory(*z80->PC+2) );
-    rp[2] = z80->IX;
-    rp2[2] = z80->IX;
+    r[4] = &z80->IXH;
+    r[5] = &z80->IXL;
+    rp[2] = &z80->IX;
+    rp2[2] = &z80->IX;
 }
 
 void useFDRegisterTable(z80_t* z80, uint8_t** r, uint16_t** rp, uint16_t** rp2){
-    r[4] = z80->IYH;
-    r[5] = z80->IYL;
-    r[6] = (uint8_t*)(uintptr_t)( *z80->IY + (int8_t)*z80->readMemory(*z80->PC+2) );
-    rp[2] = z80->IY;
-    rp2[2] = z80->IY;
+    r[4] = &z80->IYH;
+    r[5] = &z80->IYL;
+    rp[2] = &z80->IY;
+    rp2[2] = &z80->IY;
 }
 
 void adjustDDorFFOpcode(z80_t* z80, uint8_t** r, uint16_t** rp, uint16_t** rp2){
-    *z80->PC += 1;
-    r[4] = z80->H;
-    r[5] = z80->L;
+    z80->PC += 1;
+    r[4] = &z80->H;
+    r[5] = &z80->L;
 }
 
 void infoCPU(z80_t* z80){
     fprintf(stderr, "PC: %04X, AF: %04X, BC: %04X, DE: %04X, HL: %04X, SP: %04X, "
          "IX: %04X, IY: %04X\n",
-      *z80->PC, *z80->AF, *z80->BC, *z80->DE, *z80->HL, *z80->SP, *z80->IX, *z80->IY);
+      z80->PC, z80->AF, z80->BC, z80->DE, z80->HL, z80->SP, z80->IX, z80->IY);
 
-    fprintf(stderr, "S: %d ", (bool)(*z80->F & SET_S));
-    fprintf(stderr, "Z: %d ", (bool)(*z80->F & SET_Z));
-    fprintf(stderr, "C: %d ", (bool)(*z80->F & SET_C));
-    fprintf(stderr, "P: %d ", (bool)(*z80->F & SET_P));
-    fprintf(stderr, "A: %d\n", (bool)(*z80->F & SET_H));
-    fprintf(stderr, "OPCODE: 0x%02X %02X %02X\n", *z80->readMemory(*z80->PC), *z80->readMemory(*z80->PC+1), *z80->readMemory(*z80->PC+2));
+    fprintf(stderr, "S: %d ", (bool)(z80->F & SET_S));
+    fprintf(stderr, "Z: %d ", (bool)(z80->F & SET_Z));
+    fprintf(stderr, "C: %d ", (bool)(z80->F & SET_C));
+    fprintf(stderr, "P: %d ", (bool)(z80->F & SET_P));
+    fprintf(stderr, "A: %d\n", (bool)(z80->F & SET_H));
+    fprintf(stderr, "OPCODE: 0x%02X %02X %02X\n", z80->readMemory(z80->PC), z80->readMemory(z80->PC+1), z80->readMemory(z80->PC+2));
     fprintf(stderr, "cycles: %llu\n\n", z80->cycles);
-
-    /*
-    fprintf(stderr, "%llu ", z80->cycles);
-    fprintf(stderr, "$%04X\t", *z80->PC);
-    fprintf(stderr, "AF :0x%04X BC: 0x%04X ", *z80->AF, *z80->BC);
-    fprintf(stderr, "DE: 0x%04X HL: 0x%04X\n", *z80->DE, *z80->HL);
-    fprintf(stderr, "AF_ :0x%04X BC_: 0x%04X DE_: 0x%04X HL_: 0x%04X\n", *z80->AF_, *z80->BC_, *z80->DE_, *z80->HL_);
-    fprintf(stderr, "IX: 0x%04X IY: 0x%04X\n", *z80->IX, *z80->IY);
-    fprintf(stderr, "S: %d ", (bool)(*z80->F & SET_S));
-    fprintf(stderr, "Z: %d ", (bool)(*z80->F & SET_Z));
-    fprintf(stderr, "C: %d ", (bool)(*z80->F & SET_C));
-    fprintf(stderr, "P: %d ", (bool)(*z80->F & SET_P));
-    fprintf(stderr, "A: %d ", (bool)(*z80->F & SET_H));
-    fprintf(stderr, "SP: 0x%04X\n", *z80->SP);
-    fprintf(stderr, "Stack: 0x%04X\n", *(uint16_t*)z80->readMemory(*z80->SP));
-    fprintf(stderr, "OPCODE: 0x%02X %02X %02X", *z80->readMemory(*z80->PC), *z80->readMemory(*z80->PC+1), *z80->readMemory(*z80->PC+2));
-    fprintf(stderr, "\n\n");
-    */
 }
 
 void processInterrupt(z80_t* z80){
@@ -269,7 +236,7 @@ void processInterrupt(z80_t* z80){
             break;
             
             case 2:
-            uint16_t interruptAddress = *(uint16_t*)z80->readMemory((*z80->I << 8) | z80->INTERRUPT_VECT);
+            uint16_t interruptAddress = readHalfWord(z80, (z80->I << 8) | z80->INTERRUPT_VECT);
             CALL(z80, interruptAddress);
             z80->cycles += 19;
             break;
@@ -289,7 +256,7 @@ void stepCPU(z80_t* z80){
     }
 
     // increase 7 bits of R register
-    *z80->R = ((*z80->R + 1) & 0x7F) | (*z80->R & 0x80);
+    z80->R = ((z80->R + 1) & 0x7F) | (z80->R & 0x80);
         
     #ifdef DEBUG
         infoCPU(z80);
@@ -305,7 +272,7 @@ void stepCPU(z80_t* z80){
     uint16_t* rp[4];
     uint16_t* rp2[4];
 
-    uint8_t opcode = *z80->readMemory(*z80->PC);
+    uint8_t opcode = z80->readMemory(z80->PC);
     uint8_t x;
     uint8_t y;
     uint8_t z;
@@ -334,32 +301,32 @@ void stepCPU(z80_t* z80){
             prefixFD = true;
             break;
         }
-        *z80->PC += 1;
+        z80->PC += 1;
         break;
     }
 
-    opcode = *z80->readMemory(*z80->PC);
+    opcode = z80->readMemory(z80->PC);
 
     switch(opcode){
         case 0XCB:
         if(prefixDD || prefixFD)
-            *z80->PC += 1;
+            z80->PC += 1;
 
-        *z80->PC += 1;
-        opcode = *z80->readMemory(*z80->PC);
+        z80->PC += 1;
+        opcode = z80->readMemory(z80->PC);
         x = opcode >> 6;
         y = (opcode >> 3) & 0b111;
         z = opcode & 0b111;
         q = y & 0b1;
         p = (y >> 1) & 0b11;
 
-        *z80->PC += 1;
-        uint8_t memptr = (uint8_t)(uintptr_t)r[6];
+        z80->PC += 1;
         if(z == 6){
-            if(x == 1)
-                r[z] = z80->readMemory((uintptr_t)r[z]);
+            if(prefixDD || prefixFD)
+                nn = *rp[2] + (int8_t)z80->readMemory(z80->PC - 2);
             else
-                r[z] = z80->writeMemory((uintptr_t)r[z]);
+                nn = z80->HL;
+            z80->aux_reg = z80->readMemory(nn);
         }
         switch(x){
             case 0:
@@ -371,15 +338,15 @@ void stepCPU(z80_t* z80){
             BIT(z80, y, r[z]);
             // XY FLAGS SPECIAL BEHAVIOUR IF (HL) OR (IX+d) OR (IY+d) IS PARAMETER ON BIT INSTRUCTION
             if(z == 6){
-                if(memptr & 0b100000)
-                    *z80->F |= SET_Y;
+                if(nn & 0b100000)
+                    z80->F |= SET_Y;
                 else 
-                    *z80->F &= CLEAR_Y; 
+                    z80->F &= CLEAR_Y; 
 
-                if(memptr & 0b1000)
-                    *z80->F |= SET_X;
+                if(nn & 0b1000)
+                    z80->F |= SET_X;
                 else 
-                    *z80->F &= CLEAR_X;
+                    z80->F &= CLEAR_X;
             } 
             break;
 
@@ -395,20 +362,24 @@ void stepCPU(z80_t* z80){
         if(z == 6 && (prefixDD || prefixFD)){
             if(x == 1)
                 z80->cycles += 20;
-            else
+            else {
+                z80->writeMemory(nn, z80->aux_reg);
                 z80->cycles += 23;
+            }
         } else if(z == 6 && !prefixDD && !prefixDD){
             if(x == 1)
                 z80->cycles += 12;
-            else
+            else {
+                z80->writeMemory(nn, z80->aux_reg);
                 z80->cycles += 15;
+            }
         } else
             z80->cycles += 8;
         break;
 
         case 0XED:
-        *z80->PC = *z80->PC + 1;
-        opcode = *z80->readMemory(*z80->PC);
+        z80->PC = z80->PC + 1;
+        opcode = z80->readMemory(z80->PC);
         x = opcode >> 6;
         y = (opcode >> 3) & 0b111;
         z = opcode & 0b111;
@@ -418,74 +389,74 @@ void stepCPU(z80_t* z80){
         switch(x){
             case 0:
             case 3:
-            *z80->PC += 1;
+            z80->PC += 1;
             NOP(z80);
             break;
 
             case 1:
             switch(z){
                 case 0:
-                *z80->PC += 1;
+                z80->PC += 1;
                 if(y != 6){
-                    OPCODE_IN(z80, r[y], *z80->BC);
+                    *r[y] = z80->readIO(z80->BC);
                     setSign8Bit(z80, *r[y]);
                     setParity(z80, *r[y]);
                 } else {
-                    uint8_t copy = *z80->A;
-                    OPCODE_IN(z80, z80->A, *z80->BC);
-                    setSign8Bit(z80, *z80->A);
-                    setParity(z80, *z80->A);
-                    *z80->A = copy;
+                    uint8_t copy = z80->A;
+                    z80->A = z80->readIO(z80->BC);
+                    setSign8Bit(z80, z80->A);
+                    setParity(z80, z80->A);
+                    z80->A = copy;
                 }
                 z80->cycles += 12;
                 break;
 
                 case 1:
-                *z80->PC += 1;
+                z80->PC += 1;
                 if(y != 6){
-                    OPCODE_OUT(z80, *r[y], *z80->BC);
+                    z80->writeIO(z80->BC, *r[y]);
                     setSign8Bit(z80, *r[y]);
                     setParity(z80, *r[y]);
                     setSign8Bit(z80, *r[y]);
                 } else {
-                    OPCODE_OUT(z80, 0, *z80->BC);
-                    setSign8Bit(z80, *z80->A);
-                    setParity(z80, *z80->A);
-                    setSign8Bit(z80, *z80->A);
+                    z80->writeIO(z80->BC, 0);
+                    setSign8Bit(z80, z80->A);
+                    setParity(z80, z80->A);
+                    setSign8Bit(z80, z80->A);
                 }
                 z80->cycles += 12;
                 break;
 
                 case 2:
-                *z80->PC += 1;
+                z80->PC += 1;
                 if(q == 0)
-                    SBC_16(z80, z80->HL, *rp[p]);
+                    SBC_16(z80, &z80->HL, *rp[p]);
                 else
-                    ADC_16(z80, z80->HL, *rp[p]);
+                    ADC_16(z80, &z80->HL, *rp[p]);
                 z80->cycles += 15;
                 break;
 
                 case 3:
-                nn = *(uint16_t*)z80->readMemory(*z80->PC+1);
-                *z80->PC += 3;
+                nn = readHalfWord(z80, z80->PC+1);
+                z80->PC += 3;
                 if(q == 0)
-                    LD_16(z80, (uint16_t*)z80->writeMemory(nn), *rp[p]);
-                else 
-                    LD_16(z80, rp[p], *(uint16_t*)z80->readMemory(nn));
-                if(rp[p] == z80->HL)
+                    writeHalfWord(z80, nn, *rp[p]);
+                else
+                    *rp[p] = readHalfWord(z80, nn);
+                if(rp[p] == &z80->HL)
                     z80->cycles += 16;
                 else
                     z80->cycles += 20;
                 break;
 
                 case 4:
-                *z80->PC += 1;
-                NEG(z80, z80->A);
+                z80->PC += 1;
+                NEG(z80, &z80->A);
                 z80->cycles += 8;
                 break;
 
                 case 5:
-                *z80->PC += 1;
+                z80->PC += 1;
                 if(y != 1)
                     RETN(z80);
                 else
@@ -494,31 +465,31 @@ void stepCPU(z80_t* z80){
                 break;
 
                 case 6:
-                *z80->PC += 1;
+                z80->PC += 1;
                 IM(z80, im[y]);
                 z80->cycles += 8;
                 break;
 
                 case 7:
-                *z80->PC += 1;
+                z80->PC += 1;
                 switch(y){
                     case 0:
-                    LD_8(z80, z80->I, *z80->A);
+                    z80->I = z80->A;
                     z80->cycles += 9;
                     break;
 
                     case 1:
-                    LD_8(z80, z80->R, *z80->A);
+                    z80->R = z80->A;
                     z80->cycles += 9;
                     break;
 
                     case 2:
-                    LD_8(z80, z80->A, *z80->I);
+                    z80->A = z80->I;
                     z80->cycles += 9;
                     break;
 
                     case 3:
-                    LD_8(z80, z80->A, *z80->R);
+                    z80->A = z80->R;
                     z80->cycles += 9;
                     break;
 
@@ -545,7 +516,7 @@ void stepCPU(z80_t* z80){
             break;
 
             case 2:
-            *z80->PC += 1;
+            z80->PC += 1;
             blockFunc function = bli[(y-4)+z*4];
             (*function)(z80);
             break;
@@ -565,62 +536,62 @@ void stepCPU(z80_t* z80){
                 case 0:
                 switch(y){
                     case 0:
-                    *z80->PC += 1;
+                    z80->PC += 1;
                     NOP(z80);
                     break;
 
                     case 1:
-                    *z80->PC += 1;
-                    EX(z80, z80->AF, z80->AF_);
+                    z80->PC += 1;
+                    EX(z80, &z80->AF, &z80->AF_);
                     z80->cycles += 4;
                     break;
 
                     case 2:
-                    *z80->PC += 2;
-                    DJNZ(z80, *z80->readMemory(*z80->PC-1));
+                    z80->PC += 2;
+                    DJNZ(z80, z80->readMemory(z80->PC-1));
                     break;
 
                     case 3:
-                    *z80->PC += 2;
-                    JR(z80, *z80->readMemory(*z80->PC-1));
+                    z80->PC += 2;
+                    JR(z80, z80->readMemory(z80->PC-1));
                     z80->cycles += 12;
                     break;
 
                     case 4:
-                    *z80->PC += 2;
-                    old_PC = *z80->PC;
-                    JRNZ(z80, *z80->readMemory(*z80->PC-1));
-                    if(old_PC == *z80->PC)
+                    z80->PC += 2;
+                    old_PC = z80->PC;
+                    JRNZ(z80, z80->readMemory(z80->PC-1));
+                    if(old_PC == z80->PC)
                         z80->cycles += 7;
                     else
                         z80->cycles += 12;
                     break;
 
                     case 5:
-                    *z80->PC += 2;
-                    old_PC = *z80->PC;
-                    JRZ(z80, *z80->readMemory(*z80->PC-1));
-                    if(old_PC == *z80->PC)
+                    z80->PC += 2;
+                    old_PC = z80->PC;
+                    JRZ(z80, z80->readMemory(z80->PC-1));
+                    if(old_PC == z80->PC)
                         z80->cycles += 7;
                     else
                         z80->cycles += 12;
                     break;
 
                     case 6:
-                    *z80->PC += 2;
-                    old_PC = *z80->PC;
-                    JRNC(z80, *z80->readMemory(*z80->PC-1));
-                    if(old_PC == *z80->PC)
+                    z80->PC += 2;
+                    old_PC = z80->PC;
+                    JRNC(z80, z80->readMemory(z80->PC-1));
+                    if(old_PC == z80->PC)
                         z80->cycles += 7;
                     else
                         z80->cycles += 12;
                     break;
 
                     case 7:
-                    *z80->PC += 2;
-                    old_PC = *z80->PC;
-                    JRC(z80, *z80->readMemory(*z80->PC-1));
-                    if(old_PC == *z80->PC)
+                    z80->PC += 2;
+                    old_PC = z80->PC;
+                    JRC(z80, z80->readMemory(z80->PC-1));
+                    if(old_PC == z80->PC)
                         z80->cycles += 7;
                     else
                         z80->cycles += 12;
@@ -631,19 +602,19 @@ void stepCPU(z80_t* z80){
                 case 1:
                 switch(q){
                     case 0:
-                    nn = *(uint16_t*)z80->readMemory(*z80->PC+1);
-                    *z80->PC += 3;
-                    LD_16(z80, rp[p], nn);
-                    if(rp[p] == z80->IX || rp[p] == z80->IY)
+                    nn = readHalfWord(z80, z80->PC+1);
+                    z80->PC += 3;
+                    *rp[p] = nn;
+                    if(rp[p] == &z80->IX || rp[p] == &z80->IY)
                         z80->cycles += 14;
                     else
                         z80->cycles += 10;
                     break;
 
                     case 1:
-                    *z80->PC += 1;
+                    z80->PC += 1;
                     ADD_16(z80, rp[2], rp[p]);
-                    if(rp[2] == z80->HL)
+                    if(rp[2] == &z80->HL)
                         z80->cycles += 11;
                     else 
                         z80->cycles += 15;
@@ -656,31 +627,31 @@ void stepCPU(z80_t* z80){
                     case 0:
                     switch(p){
                         case 0:
-                        *z80->PC += 1;
-                        LD_8(z80, z80->writeMemory(*z80->BC), *z80->A);
+                        z80->PC += 1;
+                        z80->writeMemory(z80->BC, z80->A);
                         z80->cycles += 7;
                         break;
 
                         case 1:
-                        *z80->PC += 1;
-                        LD_8(z80, z80->writeMemory(*z80->DE), *z80->A);
+                        z80->PC += 1;
+                        z80->writeMemory(z80->DE, z80->A);
                         z80->cycles += 7;
                         break;
 
                         case 2:
-                        nn = *(uint16_t*)z80->readMemory(*z80->PC+1);
-                        *z80->PC += 3;
-                        LD_16(z80, (uint16_t*)z80->writeMemory(nn), *rp[2]);
-                        if(rp[2] == z80->HL)
+                        nn = readHalfWord(z80, z80->PC+1);
+                        z80->PC += 3;
+                        writeHalfWord(z80, nn, *rp[2]);
+                        if(rp[2] == &z80->HL)
                             z80->cycles += 16;
                         else
                             z80->cycles += 20;
                         break;
 
                         case 3:
-                        nn = *(uint16_t*)z80->readMemory(*z80->PC+1);
-                        *z80->PC += 3;
-                        LD_8(z80, (uint8_t*)z80->writeMemory(nn), *z80->A);
+                        nn = readHalfWord(z80, z80->PC+1);
+                        z80->PC += 3;
+                        z80->writeMemory(nn, z80->A);
                         z80->cycles += 13;
                         break;
                     }
@@ -689,33 +660,33 @@ void stepCPU(z80_t* z80){
                     case 1:
                     switch(p){
                         case 0:
-                        *z80->PC += 1;
-                        LD_8(z80, z80->A, *z80->readMemory(*z80->BC));
+                        z80->PC += 1;
+                        z80->A = z80->readMemory(z80->BC);
                         z80->cycles += 7;
                         break;
 
                         case 1:
-                        *z80->PC += 1;
-                        LD_8(z80, z80->A, *z80->readMemory(*z80->DE));
+                        z80->PC += 1;
+                        z80->A = z80->readMemory(z80->DE);
                         z80->cycles += 7;
                         break;
 
                         case 2:
-                        nn = *(uint16_t*)z80->readMemory(*z80->PC+1);
-                        val16 = *(uint16_t*)z80->readMemory(nn);
-                        *z80->PC += 3;
-                        LD_16(z80, rp[2], val16);
-                        if(rp[2] == z80->HL)
+                        nn = readHalfWord(z80, z80->PC+1);
+                        val16 = readHalfWord(z80, nn);
+                        z80->PC += 3;
+                        *rp[2] = val16;
+                        if(rp[2] == &z80->HL)
                             z80->cycles += 16;
                         else
                             z80->cycles += 20;
                         break;
 
                         case 3:
-                        nn = *(uint16_t*)z80->readMemory(*z80->PC+1);
-                        val8 = *z80->readMemory(nn);
-                        *z80->PC += 3;
-                        LD_8(z80, z80->A, val8);
+                        nn = readHalfWord(z80, z80->PC+1);
+                        val8 = z80->readMemory(nn);
+                        z80->PC += 3;
+                        z80->A = val8;
                         z80->cycles += 13;
                         break;
                     }
@@ -726,72 +697,82 @@ void stepCPU(z80_t* z80){
                 case 3:
                 switch(q){
                     case 0:
-                    *z80->PC += 1;
+                    z80->PC += 1;
                     INC_16(z80, rp[p]);
                     break;
 
                     case 1:
-                    *z80->PC += 1;
+                    z80->PC += 1;
                     DEC_16(z80, rp[p]);
                     break;
                 }
-                if(p == 2 && rp[p] != z80->HL)
+                if(p == 2 && rp[p] != &z80->HL)
                     z80->cycles += 10;
                 else
                     z80->cycles += 6;
                 break;
 
                 case 4:
-                *z80->PC += 1;
+                z80->PC += 1;
                 if(y == 6 && (prefixDD || prefixFD)){
-                    *z80->PC += 1;
+                    nn = *rp[2] + (int8_t)z80->readMemory(z80->PC);
+                    z80->PC += 1;
                     z80->cycles += 23;
-                } else if(y == 6 && !prefixDD && !prefixFD)
+                } else if(y == 6 && !prefixDD && !prefixFD) {
+                    nn = z80->HL;
                     z80->cycles += 11;
-                else if((prefixDD || prefixFD) && (y == 4 || y == 5))
+                } else if((prefixDD || prefixFD) && (y == 4 || y == 5))
                     z80->cycles += 8;
                 else 
                     z80->cycles += 4;
                 if(y == 6)
-                    r[y] = z80->writeMemory((uintptr_t)r[y]);
+                    z80->aux_reg = z80->readMemory(nn);
                 INC_8(z80, r[y]);
+                if(y == 6)
+                    z80->writeMemory(nn, z80->aux_reg);
                 break;
 
                 case 5:
-                *z80->PC += 1;
+                z80->PC += 1;
                 if(y == 6 && (prefixDD || prefixFD)){
-                    *z80->PC += 1;
+                    nn = *rp[2] + (int8_t)z80->readMemory(z80->PC);
+                    z80->PC += 1;
                     z80->cycles += 23;
-                } else if(y == 6 && !prefixDD && !prefixFD)
+                } else if(y == 6 && !prefixDD && !prefixFD){
+                    nn = z80->HL;
                     z80->cycles += 11;
-                else if((prefixDD || prefixFD) && (y == 4 || y == 5))
+                } else if((prefixDD || prefixFD) && (y == 4 || y == 5))
                     z80->cycles += 8;
                 else 
                     z80->cycles += 4;
                 if(y == 6)
-                    r[y] = z80->writeMemory((uintptr_t)r[y]);
+                    z80->aux_reg = z80->readMemory(nn);
                 DEC_8(z80, r[y]);
+                if(y == 6)
+                    z80->writeMemory(nn, z80->aux_reg);
                 break;
 
                 case 6:
                 if(y == 6 && (prefixDD || prefixFD)){
+                    nn = *rp[2] + (int8_t)z80->readMemory(z80->PC+1);
                     adjustDDorFFOpcode(z80, r, rp, rp2);
                     z80->cycles += 19;
                 } else if((prefixDD || prefixFD) && (y == 4 || y == 5))
                     z80->cycles += 11;
-                else if(y == 6 && !prefixDD && !prefixFD)
+                else if(y == 6 && !prefixDD && !prefixFD) {
+                    nn = z80->HL;
                     z80->cycles += 10;
-                else
+                } else
                     z80->cycles += 7;
+                val8 = z80->readMemory(z80->PC+1);
+                z80->PC += 2;
+                *r[y] = val8;
                 if(y == 6)
-                    r[y] = z80->writeMemory((uintptr_t)r[y]);
-                val8 = *z80->readMemory(*z80->PC+1);
-                *z80->PC += 2;
-                LD_8(z80, r[y], val8);
+                    z80->writeMemory(nn, z80->aux_reg);
                 break;
 
                 case 7:
-                *z80->PC += 1;
+                z80->PC += 1;
                 switch(y){
                     case 0:
                     RLCA(z80);
@@ -831,50 +812,55 @@ void stepCPU(z80_t* z80){
             break;
 
             case 1:
-            *z80->PC += 1;
+            z80->PC += 1;
             if(z == 6 && y == 6){
                 HLT(z80);
                 z80->cycles += 4;
             } else {
                 if((z == 6 || y == 6) && (prefixDD || prefixFD)){
+                    nn = *rp[2] + (int8_t)z80->readMemory(z80->PC);
                     adjustDDorFFOpcode(z80, r, rp, rp2);
                     z80->cycles += 19;
                 } else if(prefixDD || prefixFD)
                     z80->cycles += 8; 
-                else if((z == 6 || y == 6) && !prefixDD && !prefixFD)
+                else if((z == 6 || y == 6) && !prefixDD && !prefixFD){
+                    nn = z80->HL;
                     z80->cycles += 7;
-                else
+                } else
                     z80->cycles += 4;
-                if(y == 6)
-                    r[y] = z80->writeMemory((uintptr_t)r[y]);
                 if(z == 6)
-                    r[z] = z80->readMemory((uintptr_t)r[z]);
-                LD_8(z80, r[y], *r[z]);
+                    z80->aux_reg = z80->readMemory(nn);
+                *r[y] = *r[z];
+                if(y == 6)
+                    z80->writeMemory(nn, z80->aux_reg);
             }
             break;
 
             case 2:
             if((prefixDD || prefixFD) && z == 6){
-                *z80->PC += 1;
-                r[z] = z80->readMemory((uintptr_t)r[z]);
+                z80->PC += 1;
+                nn = *rp[2] + (int8_t)z80->readMemory(z80->PC);
                 z80->cycles += 19;
             } else if(!prefixDD && !prefixFD && z == 6){
-                r[z] = z80->readMemory((uintptr_t)r[z]);
+                nn = z80->HL;
                 z80->cycles += 7;
             } else if((prefixDD || prefixFD) && (z == 4 || z == 5))
                 z80->cycles += 8;
             else
                 z80->cycles += 4;
+            z80->aux_reg = z80->readMemory(nn);
             aluFunc function = alu[y];
-            *z80->PC += 1;
-            (*function)(z80, z80->A, *r[z]);
+            z80->PC += 1;
+            (*function)(z80, &z80->A, *r[z]);
+            if(z == 6)
+                z80->writeMemory(nn, z80->aux_reg);
             break;
 
             case 3:
             switch(z){
                 case 0:
-                *z80->PC += 1;
-                old_PC = *z80->PC;
+                z80->PC += 1;
+                old_PC = z80->PC;
                 switch(y){
                     case 0:
                     RETNZ(z80);
@@ -908,18 +894,18 @@ void stepCPU(z80_t* z80){
                     RETM(z80);
                     break;
                 }
-                if(old_PC == *z80->PC)
+                if(old_PC == z80->PC)
                     z80->cycles += 5;
                 else
                     z80->cycles += 11;
                 break;
 
                 case 1:
-                *z80->PC += 1;
+                z80->PC += 1;
                 switch(q){
                     case 0:
                     POP(z80, rp2[p]);
-                    if(rp2[p] == z80->IX || rp2[p] == z80->IY)
+                    if(rp2[p] == &z80->IX || rp2[p] == &z80->IY)
                         z80->cycles += 14;
                     else
                         z80->cycles += 10;
@@ -939,15 +925,15 @@ void stepCPU(z80_t* z80){
 
                         case 2:
                         JP(z80, *rp[2]);
-                        if(rp[2] == z80->HL)
+                        if(rp[2] == &z80->HL)
                             z80->cycles += 4;
                         else
                             z80->cycles += 8;
                         break;
 
                         case 3:
-                        LD_16(z80, z80->SP, *rp[2]);
-                        if(rp[2] == z80->HL)
+                        z80->SP = *rp[2];
+                        if(rp[2] == &z80->HL)
                             z80->cycles += 6;
                         else
                             z80->cycles += 10;
@@ -958,8 +944,8 @@ void stepCPU(z80_t* z80){
                 break;
 
                 case 2:
-                val16 = *(uint16_t*)z80->readMemory(*z80->PC+1);
-                *z80->PC += 3;
+                val16 = readHalfWord(z80, z80->PC+1);
+                z80->PC += 3;
                 switch(y){
                     case 0:
                     JPNZ(z80, val16);
@@ -999,50 +985,51 @@ void stepCPU(z80_t* z80){
                 case 3:
                 switch(y){
                     case 0:
-                    val16 = *(uint16_t*)z80->readMemory(*z80->PC+1);
-                    *z80->PC += 3;
+                    val16 = readHalfWord(z80, z80->PC+1);
+                    z80->PC += 3;
                     JP(z80, val16);
                     z80->cycles += 10;
                     break;
                     
                     case 2:
-                    val8 = *z80->readMemory(*z80->PC+1);
-                    *z80->PC += 2;
-                    OPCODE_OUT(z80, *z80->A, val8);
+                    val8 = z80->readMemory(z80->PC+1);
+                    z80->PC += 2;
+                    z80->writeIO(z80->A, val8);
                     z80->cycles += 11;
                     break;
                     
                     case 3:
-                    val16 = (*z80->A << 8) | *z80->readMemory(*z80->PC+1);
-                    *z80->PC += 2;
-                    OPCODE_IN(z80, z80->A, val16);
+                    val16 = (z80->A << 8) | z80->readMemory(z80->PC+1);
+                    z80->PC += 2;
+                    z80->A = z80->readIO(val16);
                     z80->cycles += 11;
                     break;
 
                     case 4:
-                    *z80->PC += 1;
-                    uint16_t* addr = (uint16_t*)z80->writeMemory(*z80->SP);
-                    EX(z80, addr, rp[2]);
-                    if(rp[2] == z80->IX || rp[2] == z80->IY)
+                    z80->PC += 1;
+                    val16 = readHalfWord(z80, z80->SP);
+                    EX(z80, &val16, rp[2]);
+                    writeHalfWord(z80, z80->SP, val16);
+                    if(rp[2] == &z80->IX || rp[2] == &z80->IY)
                         z80->cycles += 23;
                     else
                         z80->cycles += 19;
                     break;
 
                     case 5:
-                    *z80->PC += 1;
-                    EX(z80, z80->DE, z80->HL);
+                    z80->PC += 1;
+                    EX(z80, &z80->DE, &z80->HL);
                     z80->cycles += 4;
                     break;
 
                     case 6:
-                    *z80->PC += 1;
+                    z80->PC += 1;
                     DI(z80);
                     z80->cycles += 4;
                     break;
 
                     case 7:
-                    *z80->PC += 1;
+                    z80->PC += 1;
                     EI(z80);
                     z80->cycles += 4;
                     break;
@@ -1050,9 +1037,9 @@ void stepCPU(z80_t* z80){
                 break;
 
                 case 4:
-                val16 = *(uint16_t*)z80->readMemory(*z80->PC+1);
-                *z80->PC += 3;
-                old_PC = *z80->PC;
+                val16 = readHalfWord(z80, z80->PC+1);
+                z80->PC += 3;
+                old_PC = z80->PC;
                 switch(y){
                     case 0:
                     CALLNZ(z80, val16);
@@ -1086,7 +1073,7 @@ void stepCPU(z80_t* z80){
                     CALLM(z80, val16);
                     break;
                 }
-                if(old_PC == *z80->PC)
+                if(old_PC == z80->PC)
                     z80->cycles += 10;
                 else
                     z80->cycles += 17;
@@ -1095,9 +1082,9 @@ void stepCPU(z80_t* z80){
                 case 5:
                 switch(q){
                     case 0:
-                    *z80->PC += 1;
+                    z80->PC += 1;
                     PUSH(z80, *rp2[p]);
-                    if(rp2[p] == z80->IX || rp2[p] == z80->IY)
+                    if(rp2[p] == &z80->IX || rp2[p] == &z80->IY)
                         z80->cycles += 15;
                     else
                         z80->cycles += 11;
@@ -1105,8 +1092,8 @@ void stepCPU(z80_t* z80){
 
                     case 1:
                     if(p == 0){
-                        val16 = *(uint16_t*)z80->readMemory(*z80->PC+1);
-                        *z80->PC += 3;
+                        val16 = readHalfWord(z80, z80->PC+1);
+                        z80->PC += 3;
                         CALL(z80, val16);
                         z80->cycles += 17;
                     }
@@ -1115,15 +1102,15 @@ void stepCPU(z80_t* z80){
                 break;
 
                 case 6:
-                val8 = *z80->readMemory(*z80->PC+1);
+                val8 = z80->readMemory(z80->PC+1);
                 aluFunc function = alu[y];
-                *z80->PC += 2;
-                (*function)(z80, z80->A, val8);
+                z80->PC += 2;
+                (*function)(z80, &z80->A, val8);
                 z80->cycles += 7;
                 break;
 
                 case 7:
-                *z80->PC += 1;
+                z80->PC += 1;
                 RST(z80, y);
                 z80->cycles += 11;
                 break;
@@ -1148,8 +1135,8 @@ void EX(z80_t* z80, uint16_t* regA, uint16_t* regB){
 }
 
 void DJNZ(z80_t* z80, int8_t d){
-    *z80->B -= 1;   
-    if(*z80->B != 0){
+    z80->B -= 1;   
+    if(z80->B != 0){
         JR(z80, d);  
         z80->cycles += 13;
     } else
@@ -1157,35 +1144,27 @@ void DJNZ(z80_t* z80, int8_t d){
 }
 
 void JR(z80_t* z80, int8_t d){
-    *z80->PC += d;
+    z80->PC += d;
 }
 
 void JRNZ(z80_t* z80, int8_t d){
-    if(!(*z80->F & SET_Z))
+    if(!(z80->F & SET_Z))
         JR(z80, d);
 }
 
 void JRZ(z80_t* z80, int8_t d){
-    if((*z80->F & SET_Z))
+    if((z80->F & SET_Z))
         JR(z80, d);
 }
 
 void JRNC(z80_t* z80, int8_t d){
-    if(!(*z80->F & SET_C))
+    if(!(z80->F & SET_C))
         JR(z80, d);
 }
 
 void JRC(z80_t* z80, int8_t d){
-    if(*z80->F & SET_C)
+    if(z80->F & SET_C)
         JR(z80, d);
-}
-
-void LD_8(z80_t* z80, uint8_t* reg, uint8_t val){
-    *reg = val;
-}
-
-void LD_16(z80_t* z80, uint16_t* reg, uint16_t val){
-    *reg = val;
 }
 
 void ADD_16(z80_t* z80, uint16_t* regDst, uint16_t* regSrc){
@@ -1242,56 +1221,56 @@ void DAA(z80_t* z80){
     // explanation at:
     //      http://z80-heaven.wikidot.com/instructions-set:daa
     uint8_t correction = 0;
-    if((*z80->A & 0X0F) > 0x09 || (*z80->F & SET_H))
+    if((z80->A & 0X0F) > 0x09 || (z80->F & SET_H))
         correction += 0x06;
 
-    if((*z80->A > 0x99) || (*z80->F & SET_C)){
+    if((z80->A > 0x99) || (z80->F & SET_C)){
         correction += 0x60;
         SET_FLAG(C);
     }
 
     bool new_half;
-    if(*z80->F & SET_N){
-        bool old_half = (*z80->F & SET_H);
-        new_half = old_half && (*z80->A & 0x0F) < 0x06;
-        *z80->A -= correction;
+    if(z80->F & SET_N){
+        bool old_half = (z80->F & SET_H);
+        new_half = old_half && (z80->A & 0x0F) < 0x06;
+        z80->A -= correction;
     } else {
-        new_half = (*z80->A & 0x0F) > 0x09;
-        *z80->A += correction;
+        new_half = (z80->A & 0x0F) > 0x09;
+        z80->A += correction;
     }
     CHANGE_FLAG(H, new_half);
 
-    setSign8Bit(z80, *z80->A);
-    setZero(z80, *z80->A);
-    setParity(z80, *z80->A);
+    setSign8Bit(z80, z80->A);
+    setZero(z80, z80->A);
+    setParity(z80, z80->A);
 
-    CHANGE_FLAG(X, *z80->A & 0b1000);
-    CHANGE_FLAG(Y, *z80->A & 0b100000);
+    CHANGE_FLAG(X, z80->A & 0b1000);
+    CHANGE_FLAG(Y, z80->A & 0b100000);
 }
 
 void CPL(z80_t* z80){
-    *z80->A = ~(*z80->A);
+    z80->A = ~(z80->A);
     SET_FLAG(N);
     SET_FLAG(H);
-    CHANGE_FLAG(X, *z80->A & 0b1000);
-    CHANGE_FLAG(Y, *z80->A & 0b100000);
+    CHANGE_FLAG(X, z80->A & 0b1000);
+    CHANGE_FLAG(Y, z80->A & 0b100000);
 }
 
 void SCF(z80_t* z80){
     SET_FLAG(C);
     CLEAR_FLAG(H);
     CLEAR_FLAG(N);
-    CHANGE_FLAG(X, *z80->A & 0b1000);
-    CHANGE_FLAG(Y, *z80->A & 0b100000);
+    CHANGE_FLAG(X, z80->A & 0b1000);
+    CHANGE_FLAG(Y, z80->A & 0b100000);
 }
 
 void CCF(z80_t* z80){
-    bool carry = *z80->F & SET_C;
+    bool carry = z80->F & SET_C;
     CHANGE_FLAG(C, !carry);
     CHANGE_FLAG(H, carry);
     CLEAR_FLAG(N);
-    CHANGE_FLAG(X, *z80->A & 0b1000);
-    CHANGE_FLAG(Y, *z80->A & 0b100000);
+    CHANGE_FLAG(X, z80->A & 0b1000);
+    CHANGE_FLAG(Y, z80->A & 0b100000);
 }
 
 void HLT(z80_t* z80){
@@ -1299,112 +1278,102 @@ void HLT(z80_t* z80){
 }
 
 void RETNZ(z80_t* z80){
-    if(!(*z80->F & SET_Z))
-        POP(z80, z80->PC);
+    if(!(z80->F & SET_Z))
+        POP(z80, &z80->PC);
 }
 
 void RETZ(z80_t* z80){
-    if(*z80->F & SET_Z)
-        POP(z80, z80->PC);
+    if(z80->F & SET_Z)
+        POP(z80, &z80->PC);
 }
 
 void RETNC(z80_t* z80){
-    if(!(*z80->F & SET_C))
-        POP(z80, z80->PC);
+    if(!(z80->F & SET_C))
+        POP(z80, &z80->PC);
 }
 
 void RETC(z80_t* z80){
-    if(*z80->F & SET_C)
-        POP(z80, z80->PC);
+    if(z80->F & SET_C)
+        POP(z80, &z80->PC);
 }
 
 void RETPO(z80_t* z80){
-    if(!(*z80->F & SET_P))
-        POP(z80, z80->PC);
+    if(!(z80->F & SET_P))
+        POP(z80, &z80->PC);
 }
 
 void RETPE(z80_t* z80){
-    if(*z80->F & SET_P)
-        POP(z80, z80->PC);
+    if(z80->F & SET_P)
+        POP(z80, &z80->PC);
 }
 
 void RETP(z80_t* z80){
-    if(!(*z80->F & SET_S))
-        POP(z80, z80->PC);
+    if(!(z80->F & SET_S))
+        POP(z80, &z80->PC);
 }
 
 void RETM(z80_t* z80){
-    if(*z80->F & SET_S)
-        POP(z80, z80->PC);
+    if(z80->F & SET_S)
+        POP(z80, &z80->PC);
 }
 
 void POP(z80_t* z80, uint16_t* reg){
-    *reg = *(uint16_t*)z80->readMemory(*z80->SP);
-    *z80->SP = *z80->SP + 2; 
+    *reg = readHalfWord(z80, z80->SP);
+    z80->SP = z80->SP + 2; 
 }
 
 void RET(z80_t* z80){
-    POP(z80, z80->PC);
+    POP(z80, &z80->PC);
 }
 
 void EXX(z80_t* z80){
-    EX(z80, z80->BC, z80->BC_);
-    EX(z80, z80->DE, z80->DE_);
-    EX(z80, z80->HL, z80->HL_);
+    EX(z80, &z80->BC, &z80->BC_);
+    EX(z80, &z80->DE, &z80->DE_);
+    EX(z80, &z80->HL, &z80->HL_);
 }
 
 void JP(z80_t* z80, uint16_t val){
-    *z80->PC = val;
+    z80->PC = val;
 }
 
 void JPNZ(z80_t* z80, uint16_t val){
-    if(!(*z80->F & SET_Z))
+    if(!(z80->F & SET_Z))
         JP(z80, val);
 }
 
 void JPZ(z80_t* z80, uint16_t val){
-    if(*z80->F & SET_Z)
+    if(z80->F & SET_Z)
         JP(z80, val);
 }
 
 void JPNC(z80_t* z80, uint16_t val){
-    if(!(*z80->F & SET_C))
+    if(!(z80->F & SET_C))
         JP(z80, val);
 }
 
 void JPC(z80_t* z80, uint16_t val){
-    if(*z80->F & SET_C)
+    if(z80->F & SET_C)
         JP(z80, val);
 }
 
 void JPPO(z80_t* z80, uint16_t val){
-    if(!(*z80->F & SET_P))
+    if(!(z80->F & SET_P))
         JP(z80, val);
 }
 
 void JPPE(z80_t* z80, uint16_t val){
-    if(*z80->F & SET_P)
+    if(z80->F & SET_P)
         JP(z80, val);
 }
 
 void JPP(z80_t* z80, uint16_t val){
-    if(!(*z80->F & SET_S))
+    if(!(z80->F & SET_S))
         JP(z80, val);
 }
 
 void JPM(z80_t* z80, uint16_t val){
-    if(*z80->F & SET_S)
+    if(z80->F & SET_S)
         JP(z80, val);
-}
-
-void OPCODE_OUT(z80_t* z80, uint8_t data, uint16_t ioaddr){
-    uint8_t* ioport = z80->writeIO(ioaddr);
-    *ioport = data;
-}
-
-void OPCODE_IN(z80_t* z80, uint8_t* reg, uint16_t ioaddr){
-    uint8_t* ioport = z80->readIO(ioaddr);
-    *reg = *ioport;
 }
 
 void DI(z80_t* z80){
@@ -1416,53 +1385,53 @@ void EI(z80_t* z80){
 }
 
 void CALL(z80_t* z80, uint16_t val){
-    PUSH(z80, *z80->PC);
-    *z80->PC = val;
+    PUSH(z80, z80->PC);
+    z80->PC = val;
 }
 
 void CALLNZ(z80_t* z80, uint16_t val){
-    if(!(*z80->F & SET_Z))
+    if(!(z80->F & SET_Z))
         CALL(z80, val);
 }
 
 void CALLZ(z80_t* z80, uint16_t val){
-    if(*z80->F & SET_Z)
+    if(z80->F & SET_Z)
         CALL(z80, val);
 }
 
 void CALLNC(z80_t* z80, uint16_t val){
-    if(!(*z80->F & SET_C))
+    if(!(z80->F & SET_C))
         CALL(z80, val);
 }
 
 void CALLC(z80_t* z80, uint16_t val){
-    if(*z80->F & SET_C)
+    if(z80->F & SET_C)
         CALL(z80, val);
 }
 
 void CALLPO(z80_t* z80, uint16_t val){
-    if(!(*z80->F & SET_P))
+    if(!(z80->F & SET_P))
         CALL(z80, val);
 }
 
 void CALLPE(z80_t* z80, uint16_t val){
-    if(*z80->F & SET_P)
+    if(z80->F & SET_P)
         CALL(z80, val);
 }
 
 void CALLP(z80_t* z80, uint16_t val){
-    if(!(*z80->F & SET_S))
+    if(!(z80->F & SET_S))
         CALL(z80, val);
 }
 
 void CALLM(z80_t* z80, uint16_t val){
-    if(*z80->F & SET_S)
+    if(z80->F & SET_S)
         CALL(z80, val);
 }
 
 void PUSH(z80_t* z80, uint16_t val){
-    *z80->SP = *z80->SP - 2;
-    *(uint16_t*)z80->writeMemory(*z80->SP) = val;
+    z80->SP = z80->SP - 2;
+    writeHalfWord(z80, z80->SP, val);
 }
 
 void RST(z80_t* z80, uint8_t addr){
@@ -1470,48 +1439,48 @@ void RST(z80_t* z80, uint8_t addr){
 }
 
 void RLCA(z80_t* z80){
-    bool carry = *z80->A & 0b10000000;
+    bool carry = z80->A & 0b10000000;
     CHANGE_FLAG(C, carry);
     CLEAR_FLAG(H);
     CLEAR_FLAG(N);
 
-    *z80->A = (*z80->A << 1) | (carry);
+    z80->A = (z80->A << 1) | (carry);
     
-    CHANGE_FLAG(X, *z80->A & 0b1000);
-    CHANGE_FLAG(Y, *z80->A & 0b100000);
+    CHANGE_FLAG(X, z80->A & 0b1000);
+    CHANGE_FLAG(Y, z80->A & 0b100000);
 }
 
 void RRCA(z80_t* z80){
-    bool carry = *z80->A & 0b1;
+    bool carry = z80->A & 0b1;
     CHANGE_FLAG(C, carry);
     CLEAR_FLAG(H);
     CLEAR_FLAG(N);
-    *z80->A = (*z80->A >> 1) | (carry << 7);
+    z80->A = (z80->A >> 1) | (carry << 7);
 
-    CHANGE_FLAG(Y, *z80->A & 0b100000);
-    CHANGE_FLAG(X, *z80->A & 0b1000);
+    CHANGE_FLAG(Y, z80->A & 0b100000);
+    CHANGE_FLAG(X, z80->A & 0b1000);
 }
 
 void RLA(z80_t* z80){
-    bool carry = *z80->F & SET_C;
-    CHANGE_FLAG(C, *z80->A & 0b10000000);
+    bool carry = z80->F & SET_C;
+    CHANGE_FLAG(C, z80->A & 0b10000000);
     CLEAR_FLAG(H);
     CLEAR_FLAG(N);
-    *z80->A = (*z80->A << 1) | carry;
+    z80->A = (z80->A << 1) | carry;
 
-    CHANGE_FLAG(X, *z80->A & 0b1000);
-    CHANGE_FLAG(Y, *z80->A & 0b100000);
+    CHANGE_FLAG(X, z80->A & 0b1000);
+    CHANGE_FLAG(Y, z80->A & 0b100000);
 }
 
 void RRA(z80_t* z80){
-    bool carry = *z80->F & SET_C;
-    CHANGE_FLAG(C, *z80->A & 0b1);
+    bool carry = z80->F & SET_C;
+    CHANGE_FLAG(C, z80->A & 0b1);
     CLEAR_FLAG(H);
     CLEAR_FLAG(N);
-    *z80->A = (*z80->A >> 1) | (carry << 7);
+    z80->A = (z80->A >> 1) | (carry << 7);
 
-    CHANGE_FLAG(X, *z80->A & 0b1000);
-    CHANGE_FLAG(Y, *z80->A & 0b100000);
+    CHANGE_FLAG(X, z80->A & 0b1000);
+    CHANGE_FLAG(Y, z80->A & 0b100000);
 }
 
 void RLC(z80_t* z80, uint8_t* reg){
@@ -1545,7 +1514,7 @@ void RRC(z80_t* z80, uint8_t* reg){
 }
 
 void RL(z80_t* z80, uint8_t* reg){
-    bool carry = *z80->F & SET_C;
+    bool carry = z80->F & SET_C;
     bool msb = *reg >> 7;
     *reg = (*reg << 1) | carry;
     CHANGE_FLAG(C, msb);
@@ -1561,7 +1530,7 @@ void RL(z80_t* z80, uint8_t* reg){
 }
 
 void RR(z80_t* z80, uint8_t* reg){
-    bool carry = *z80->F & SET_C;
+    bool carry = z80->F & SET_C;
     bool lsb = *reg & 0b1;
     *reg = (*reg >> 1) | (carry << 7);
     CHANGE_FLAG(C, lsb);
@@ -1683,7 +1652,7 @@ void ADD(z80_t* z80, uint8_t* reg, uint8_t val){
 }
 
 void ADC(z80_t* z80, uint8_t* reg, uint8_t val){
-    bool carry = *z80->F & SET_C;
+    bool carry = z80->F & SET_C;
     uint8_t res = *reg + val + carry;
 
     bool new_carry = calculateCarry(8, *reg, val, carry);
@@ -1728,7 +1697,7 @@ void SUB(z80_t* z80, uint8_t* reg, uint8_t val){
 
 void SBC(z80_t* z80, uint8_t* reg, uint8_t val){
     val = ~val + 1;
-    bool carry = *z80->F & SET_C;
+    bool carry = z80->F & SET_C;
     bool new_carry = calculateCarry(8, *reg, val - 1, !carry);
     bool aux_carry = calculateCarry(4, *reg, val - 1, !carry);
 
@@ -1795,7 +1764,7 @@ void CP(z80_t* z80, uint8_t* reg, uint8_t val){
 }
 
 void ADC_16(z80_t* z80, uint16_t* reg, uint16_t val){
-    bool carry = *z80->F & SET_C;
+    bool carry = z80->F & SET_C;
 
     bool new_carry = calculateCarry(16, *reg, val, carry);
     CHANGE_FLAG(C, new_carry);
@@ -1818,7 +1787,7 @@ void ADC_16(z80_t* z80, uint16_t* reg, uint16_t val){
 
 void SBC_16(z80_t* z80, uint16_t* reg, uint16_t val){
     val = ~val + 1;
-    bool carry = *z80->F & SET_C;
+    bool carry = z80->F & SET_C;
     bool new_carry = calculateCarry(16, *reg, val - 1, !carry);
     bool aux_carry = calculateCarry(12, *reg, val - 1, !carry);
 
@@ -1857,64 +1826,64 @@ void IM(z80_t* z80, uint8_t im_mode){
 }
 
 void RRD(z80_t* z80){
-    uint8_t tmpA = *z80->A;
-    uint8_t val = *z80->readMemory(*z80->HL);
-    *z80->A = (tmpA & 0xF0) | (val & 0xF);
-    *z80->writeMemory(*z80->HL) = (val >> 4) | (tmpA << 4);
-    setSign8Bit(z80, *z80->A);
-    setZero(z80, *z80->A);
-    setParity(z80, *z80->A);
+    uint8_t tmpA = z80->A;
+    uint8_t val = z80->readMemory(z80->HL);
+    z80->A = (tmpA & 0xF0) | (val & 0xF);
+    z80->writeMemory( z80->HL, (val >> 4) | (tmpA << 4) );
+    setSign8Bit(z80, z80->A);
+    setZero(z80, z80->A);
+    setParity(z80, z80->A);
     CLEAR_FLAG(N);
     CLEAR_FLAG(H);
-    CHANGE_FLAG(X, *z80->A & 0b1000);
-    CHANGE_FLAG(Y, *z80->A & 0b100000);
+    CHANGE_FLAG(X, z80->A & 0b1000);
+    CHANGE_FLAG(Y, z80->A & 0b100000);
 }
 
 void RLD(z80_t* z80){
-    uint8_t tmpA = *z80->A;
-    uint8_t val = *z80->readMemory(*z80->HL);
-    *z80->A = (tmpA & 0xF0) | (val >> 4);
-    *z80->writeMemory(*z80->HL) = (val << 4) | (tmpA & 0xF);
-    setSign8Bit(z80, *z80->A);
-    setZero(z80, *z80->A);
-    setParity(z80, *z80->A);
+    uint8_t tmpA = z80->A;
+    uint8_t val = z80->readMemory(z80->HL);
+    z80->A = (tmpA & 0xF0) | (val >> 4);
+    z80->writeMemory(z80->HL, (val << 4) | (tmpA & 0xF));
+    setSign8Bit(z80, z80->A);
+    setZero(z80, z80->A);
+    setParity(z80, z80->A);
     CLEAR_FLAG(N);
     CLEAR_FLAG(H);
-    CHANGE_FLAG(X, *z80->A & 0b1000);
-    CHANGE_FLAG(Y, *z80->A & 0b100000);
+    CHANGE_FLAG(X, z80->A & 0b1000);
+    CHANGE_FLAG(Y, z80->A & 0b100000);
 }
 
 // block instructions
 
 void LDI(z80_t* z80){
-    uint8_t hl_val = *z80->readMemory(*z80->HL);
-    *z80->writeMemory(*z80->DE) = hl_val;
-    *z80->DE += 1;
-    *z80->HL += 1;
-    *z80->BC -= 1;
+    uint8_t hl_val = z80->readMemory(z80->HL);
+    z80->writeMemory(z80->DE, hl_val);
+    z80->DE += 1;
+    z80->HL += 1;
+    z80->BC -= 1;
 
-    CHANGE_FLAG(P, *z80->BC != 0);
+    CHANGE_FLAG(P, z80->BC != 0);
     CLEAR_FLAG(H);
     CLEAR_FLAG(N);
 
     z80->cycles += 16;
 
-    uint8_t res = *z80->A + hl_val;
+    uint8_t res = z80->A + hl_val;
     CHANGE_FLAG(X, res & 0b1000);
     CHANGE_FLAG(Y, res & 0b10);
 }
 
 void LDD(z80_t* z80){
     LDI(z80);
-    *z80->HL -= 2;
-    *z80->DE -= 2;
+    z80->HL -= 2;
+    z80->DE -= 2;
 }
 
 void LDIR(z80_t* z80){
     LDI(z80);
     z80->cycles -= 16;
-    if(*z80->BC != 0){
-        *z80->PC -= 2;
+    if(z80->BC != 0){
+        z80->PC -= 2;
         SET_FLAG(P);
         z80->cycles += 21;
     } else {
@@ -1926,8 +1895,8 @@ void LDIR(z80_t* z80){
 void LDDR(z80_t* z80){
     LDD(z80);
     z80->cycles -= 16;
-    if(*z80->BC != 0){
-        *z80->PC -= 2;
+    if(z80->BC != 0){
+        z80->PC -= 2;
         z80->cycles += 21;
     } else {
         z80->cycles += 16;
@@ -1935,18 +1904,18 @@ void LDDR(z80_t* z80){
 }
 
 void CPI(z80_t* z80){
-    bool carry = (bool)(*z80->F & SET_C);
-    uint8_t memory_val = *z80->readMemory(*z80->HL);
-    CP(z80, z80->A, memory_val);
-    *z80->HL += 1;
-    *z80->BC -= 1;
+    bool carry = (bool)(z80->F & SET_C);
+    uint8_t memory_val = z80->readMemory(z80->HL);
+    CP(z80, &z80->A, memory_val);
+    z80->HL += 1;
+    z80->BC -= 1;
 
-    CHANGE_FLAG(P, *z80->BC != 0);
+    CHANGE_FLAG(P, z80->BC != 0);
     CHANGE_FLAG(C, carry);
     SET_FLAG(N);
 
-    bool aux_carry = (bool)(*z80->F & SET_H);
-    uint8_t val = *z80->A - memory_val - aux_carry;
+    bool aux_carry = (bool)(z80->F & SET_H);
+    uint8_t val = z80->A - memory_val - aux_carry;
     
     CHANGE_FLAG(Y, val & 0b10);
     CHANGE_FLAG(X, val & 0b1000);
@@ -1956,14 +1925,14 @@ void CPI(z80_t* z80){
 
 void CPD(z80_t* z80){
     CPI(z80);
-    *z80->HL -= 2;
+    z80->HL -= 2;
 }
 
 void CPIR(z80_t* z80){
     CPI(z80);
     z80->cycles -= 16;
-    if(*z80->BC != 0 && !(bool)(*z80->F & SET_Z)){
-        *z80->PC -= 2;
+    if(z80->BC != 0 && !(bool)(z80->F & SET_Z)){
+        z80->PC -= 2;
         z80->cycles += 21;
     } else {
         z80->cycles += 16;
@@ -1973,8 +1942,8 @@ void CPIR(z80_t* z80){
 void CPDR(z80_t* z80){
     CPD(z80);
     z80->cycles -= 16;
-    if(*z80->BC != 0 && !(bool)(*z80->F & SET_Z)){
-        *z80->PC -= 2;
+    if(z80->BC != 0 && !(bool)(z80->F & SET_Z)){
+        z80->PC -= 2;
         z80->cycles += 21;
     } else {
         z80->cycles += 16;
@@ -1982,24 +1951,26 @@ void CPDR(z80_t* z80){
 }
 
 void INI(z80_t* z80){
-    *z80->B -= 1;
-    OPCODE_IN(z80, z80->writeMemory(*z80->HL), *z80->BC); 
-    *z80->HL += 1;  
+    z80->B -= 1;
+    uint8_t val = z80->readIO(z80->BC);
+    z80->writeMemory(z80->HL, val);
+    z80->HL += 1;  
     z80->cycles += 16;
 }
 
 void IND(z80_t* z80){
-    *z80->B -= 1;  
-    OPCODE_IN(z80, z80->writeMemory(*z80->HL), *z80->BC); 
-    *z80->HL -= 1;
+    z80->B -= 1;  
+    uint8_t val = z80->readIO(z80->BC);
+    z80->writeMemory(z80->HL, val);
+    z80->HL -= 1;
     z80->cycles += 16;
 }
 
 void INIR(z80_t* z80){
     INI(z80);
     z80->cycles -= 16;
-    if(*z80->B != 0){
-        *z80->PC -= 2;
+    if(z80->B != 0){
+        z80->PC -= 2;
         z80->cycles += 21;
     } else {
         z80->cycles += 16;
@@ -2009,8 +1980,8 @@ void INIR(z80_t* z80){
 void INDR(z80_t* z80){
     IND(z80);
     z80->cycles -= 16;
-    if(*z80->B != 0){
-        *z80->PC -= 2;
+    if(z80->B != 0){
+        z80->PC -= 2;
         z80->cycles += 21;
     } else {
         z80->cycles += 16;
@@ -2018,24 +1989,26 @@ void INDR(z80_t* z80){
 }
 
 void OUTI(z80_t* z80){
-    *z80->B -= 1;
-    OPCODE_OUT(z80, *z80->readMemory(*z80->HL), *z80->BC);
-    *z80->HL += 1;
+    z80->B -= 1;
+    uint8_t val = z80->readMemory(z80->HL);
+    z80->writeIO(z80->BC, val);
+    z80->HL += 1;
     z80->cycles += 16;
 }
 
 void OUTD(z80_t* z80){
-    *z80->B -= 1;
-    OPCODE_OUT(z80, *z80->readMemory(*z80->HL), *z80->BC);
-    *z80->HL -= 1;
+    z80->B -= 1;
+    uint8_t val = z80->readMemory(z80->HL);
+    z80->writeIO(z80->BC, val);
+    z80->HL -= 1;
     z80->cycles += 16;
 }
 
 void OTIR(z80_t* z80){
     OUTI(z80);
     z80->cycles -= 16;
-    if(*z80->B != 0){
-        *z80->PC -= 2;
+    if(z80->B != 0){
+        z80->PC -= 2;
         z80->cycles += 21;
     } else {
         z80->cycles += 16;
@@ -2045,8 +2018,8 @@ void OTIR(z80_t* z80){
 void OTDR(z80_t* z80){
     OUTD(z80);
     z80->cycles -= 16;
-    if(*z80->B != 0){
-        *z80->PC -= 2;
+    if(z80->B != 0){
+        z80->PC -= 2;
         z80->cycles += 21;
     } else {
         z80->cycles += 16;
@@ -2079,4 +2052,15 @@ bool calculateCarry(int bit, uint16_t a, uint16_t b, bool cy) {
   int32_t result = a + b + cy;
   int32_t carry = result ^ a ^ b;
   return carry & (1 << bit);
+}
+
+uint16_t readHalfWord(z80_t* z80, uint16_t addr){
+    uint8_t lo = z80->readMemory(addr);
+    uint8_t hi = z80->readMemory(addr+1);
+    return (hi << 8) | lo;
+}
+
+void writeHalfWord(z80_t* z80, uint16_t addr, uint16_t halfword){
+    z80->writeMemory(addr, halfword);
+    z80->writeMemory(addr+1, halfword >> 8);
 }

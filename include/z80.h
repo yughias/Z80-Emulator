@@ -4,7 +4,26 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-typedef uint8_t* (*busFunc)(uint16_t);
+typedef uint8_t (*readFunc)(uint16_t);
+typedef void (*writeFunc)(uint16_t, uint8_t);
+
+#define Z80_REG(a, b) \
+union { \
+    uint16_t a ## b; \
+    struct { \
+        uint8_t b; \
+        uint8_t a; \
+    }; \
+};
+
+#define Z80_XY_REG(name) \
+union { \
+    uint16_t name; \
+    struct { \
+        uint8_t name ## L; \
+        uint8_t name ## H; \
+    }; \
+};
 
 typedef struct z80_t {
     // interrupt vars
@@ -15,42 +34,32 @@ typedef struct z80_t {
     uint8_t INTERRUPT_VECT;
 
     // 16 bit regs 
-    uint16_t AF[1];
-    uint16_t BC[1];
-    uint16_t DE[1];
-    uint16_t HL[1];
-    uint16_t AF_[1];
-    uint16_t BC_[1];
-    uint16_t DE_[1];
-    uint16_t HL_[1];
-    uint16_t IX[1];
-    uint16_t IY[1];
-    uint16_t SP[1];
-    uint16_t PC[1];
+    Z80_REG(A, F);
+    Z80_REG(B, C);
+    Z80_REG(D, E);
+    Z80_REG(H, L);
 
-    // 8 bit regs
-    uint8_t* A;
-    uint8_t* F;
-    uint8_t* B;
-    uint8_t* C;
-    uint8_t* D;
-    uint8_t* E;
-    uint8_t* H;
-    uint8_t* L;
-    uint8_t* IXL;
-    uint8_t* IXH;
-    uint8_t* IYL;
-    uint8_t* IYH;
+    Z80_XY_REG(IX);
+    Z80_XY_REG(IY);
 
-    uint8_t I[1];
-    uint8_t R[1];
+    uint16_t AF_;
+    uint16_t BC_;
+    uint16_t DE_;
+    uint16_t HL_;
 
-    // busFunc
-    busFunc readMemory;
-    busFunc writeMemory;
+    uint16_t SP;
+    uint16_t PC;
 
-    busFunc readIO;
-    busFunc writeIO;
+    uint8_t I;
+    uint8_t R;
+
+    uint8_t aux_reg;
+
+    readFunc readMemory;
+    writeFunc writeMemory;
+
+    readFunc readIO;
+    writeFunc writeIO;
 
     uint64_t cycles;
 } z80_t;

@@ -7,10 +7,10 @@
 #define ZEXALL_CYCLES 46734978649
 
 z80_t z80 = {
-    .readMemory  = getReadAddress,
-    .writeMemory = getWriteAddress,
-    .readIO      = getReadIO,
-    .writeIO     = getWriteIO
+    .readMemory = readMemory,
+    .writeMemory = writeMemory,
+    .readIO = readIO,
+    .writeIO = writeIO
 };
 
 void startTest(const char*, unsigned long long);
@@ -37,7 +37,7 @@ int main(){
 void startTest(const char* filename, unsigned long long expected_cycles){
     loadROM(filename);
     initCPU(&z80);
-    *z80.PC = 0x100;
+    z80.PC = 0x100;
     emulateTest();
     printf("\n\nexpected: %llu \t emulated: %llu\n\n", expected_cycles, z80.cycles);
     
@@ -48,16 +48,16 @@ void emulateTest(){
         //infoCPU(&z80);
         stepCPU(&z80);
 
-        if(*z80.PC == 0x5)
-            if(*z80.C == 0x2)
-                printf("0x%2X ", *z80.E);
-            else if(*z80.C == 0x9){
-                for(int i = *z80.DE; MEMORY[i] != '$'; i++)
+        if(z80.PC == 0x5)
+            if(z80.C == 0x2)
+                printf("0x%2X ", z80.E);
+            else if(z80.C == 0x9){
+                for(int i = z80.DE; MEMORY[i] != '$'; i++)
                     printf("%c", MEMORY[i]);
                 stepCPU(&z80);
             }
         
-        if(*z80.PC == 0){
+        if(z80.PC == 0){
             stepCPU(&z80);
             break;
         }
