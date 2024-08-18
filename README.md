@@ -18,11 +18,11 @@ z80_t cpu {
 Every read function in the memory/IO bus must have the following signature:
 
 ```c
-uint8_t read_byte(uint16_t address);
+uint8_t read_byte(z80_t* z80, uint16_t address);
 ```
 
 Every write function in the memory/IO bus must have the following signature:
 
 ```c
-void access_bus(uint16_t address, uint8_t byte);
+void access_bus(z80_t* z80, uint16_t address, uint8_t byte);
 ```

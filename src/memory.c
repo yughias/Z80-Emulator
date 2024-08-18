@@ -19,19 +19,19 @@ void freeMemory(){
     free(MEMORY);
 }
 
-uint8_t readMemory(uint16_t addr){
+uint8_t readMemory(z80_t* z80, uint16_t addr){
     return MEMORY[addr];
 }
 
-void writeMemory(uint16_t addr, uint8_t val){
+void writeMemory(z80_t* z80, uint16_t addr, uint8_t val){
     MEMORY[addr] = val;
 }
 
-uint8_t readIO(uint16_t addr){
+uint8_t readIO(z80_t* z80, uint16_t addr){
     return IO[0];
 }
 
-void writeIO(uint16_t addr, uint8_t val){
+void writeIO(z80_t* z80, uint16_t addr, uint8_t val){
     IO[0] = val;
 }
 

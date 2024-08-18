@@ -4,8 +4,9 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-typedef uint8_t (*readFunc)(uint16_t);
-typedef void (*writeFunc)(uint16_t, uint8_t);
+typedef struct z80_t z80_t;
+typedef uint8_t (*readFunc)(z80_t*, uint16_t);
+typedef void (*writeFunc)(z80_t*, uint16_t, uint8_t);
 
 #define Z80_REG(a, b) \
 union { \
