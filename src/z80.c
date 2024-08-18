@@ -149,7 +149,7 @@ bool calculateCarry(int, uint16_t, uint16_t, bool);
 uint16_t readHalfWord(z80_t*, uint16_t);
 void writeHalfWord(z80_t*, uint16_t, uint16_t);
 
-void initCPU(z80_t* z80){
+void z80_init(z80_t* z80){
     z80->AF = 0xFFFF;
     z80->BC = 0;
     z80->DE = 0;
@@ -210,7 +210,7 @@ void adjustDDorFFOpcode(z80_t* z80, uint8_t** r, uint16_t** rp, uint16_t** rp2){
     r[5] = &z80->L;
 }
 
-void infoCPU(z80_t* z80){
+void z80_print(z80_t* z80){
     fprintf(stderr, "PC: %04X, AF: %04X, BC: %04X, DE: %04X, HL: %04X, SP: %04X, "
          "IX: %04X, IY: %04X\n",
       z80->PC, z80->AF, z80->BC, z80->DE, z80->HL, z80->SP, z80->IX, z80->IY);
@@ -244,7 +244,7 @@ void processInterrupt(z80_t* z80){
     }
 }
 
-void stepCPU(z80_t* z80){
+void z80_step(z80_t* z80){
     if(z80->INTERRUPT_ENABLED && z80->INTERRUPT_PENDING){
         processInterrupt(z80);
         return;
@@ -994,7 +994,7 @@ void stepCPU(z80_t* z80){
                     case 2:
                     val8 = z80->readMemory(z80->PC+1);
                     z80->PC += 2;
-                    z80->writeIO(z80->A, val8);
+                    z80->writeIO(val8, z80->A);
                     z80->cycles += 11;
                     break;
                     

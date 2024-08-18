@@ -65,8 +65,8 @@ typedef struct z80_t {
 } z80_t;
 
 
-void initCPU(z80_t*);
-void infoCPU(z80_t*);
-void stepCPU(z80_t*);
+void z80_init(z80_t*);
+void z80_print(z80_t*);
+void z80_step(z80_t*);
 
 #endif

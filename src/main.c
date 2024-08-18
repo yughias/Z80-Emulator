@@ -36,7 +36,7 @@ int main(){
 
 void startTest(const char* filename, unsigned long long expected_cycles){
     loadROM(filename);
-    initCPU(&z80);
+    z80_init(&z80);
     z80.PC = 0x100;
     emulateTest();
     printf("\n\nexpected: %llu \t emulated: %llu\n\n", expected_cycles, z80.cycles);
@@ -45,8 +45,8 @@ void startTest(const char* filename, unsigned long long expected_cycles){
 
 void emulateTest(){
     for(;;){
-        //infoCPU(&z80);
-        stepCPU(&z80);
+        //z80_print(&z80);
+        z80_step(&z80);
 
         if(z80.PC == 0x5)
             if(z80.C == 0x2)
@@ -54,11 +54,11 @@ void emulateTest(){
             else if(z80.C == 0x9){
                 for(int i = z80.DE; MEMORY[i] != '$'; i++)
                     printf("%c", MEMORY[i]);
-                stepCPU(&z80);
+                z80_step(&z80);
             }
         
         if(z80.PC == 0){
-            stepCPU(&z80);
+            z80_step(&z80);
             break;
         }
     }
