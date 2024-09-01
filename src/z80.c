@@ -167,6 +167,7 @@ void z80_init(z80_t* z80){
     z80->INTERRUPT_MODE    = 1;
     z80->INTERRUPT_ENABLED = false;
     z80->INTERRUPT_PENDING = false;
+    z80->INTERRUPT_DELAY = false;
     z80->INTERRUPT_VECT = 0x0000;
     z80->cycles = 0;
 }
@@ -221,37 +222,39 @@ void z80_print(z80_t* z80){
     fprintf(stderr, "P: %d ", (bool)(z80->F & SET_P));
     fprintf(stderr, "A: %d\n", (bool)(z80->F & SET_H));
     fprintf(stderr, "OPCODE: 0x%02X %02X %02X\n", z80->readMemory(z80, z80->PC), z80->readMemory(z80, z80->PC+1), z80->readMemory(z80, z80->PC+2));
-    fprintf(stderr, "cycles: %llu\n\n", z80->cycles);
+    fprintf(stderr, "cycles: %u\n\n", z80->cycles);
 }
 
 void processInterrupt(z80_t* z80){
-    if(z80->INTERRUPT_ENABLED && z80->INTERRUPT_PENDING){
-            z80->INTERRUPT_ENABLED = false;
-            z80->INTERRUPT_PENDING = false;
-            z80->HALTED = false;
-        switch(z80->INTERRUPT_MODE){
-            case 1:
-            RST(z80, 0x07);
-            z80->cycles += 13;
-            break;
-            
-            case 2:
+    z80->INTERRUPT_ENABLED = false;
+    z80->INTERRUPT_PENDING = false;
+    z80->HALTED = false;
+    switch(z80->INTERRUPT_MODE){
+        case 1:
+        RST(z80, 0x07);
+        z80->cycles += 13;
+        break;
+        
+        case 2:
+        {
             uint16_t interruptAddress = readHalfWord(z80, (z80->I << 8) | z80->INTERRUPT_VECT);
             CALL(z80, interruptAddress);
             z80->cycles += 19;
-            break;
         }
+        break;
     }
 }
 
 void z80_step(z80_t* z80){
-    if(z80->INTERRUPT_ENABLED && z80->INTERRUPT_PENDING){
+    if(!z80->INTERRUPT_DELAY && z80->INTERRUPT_ENABLED && z80->INTERRUPT_PENDING){
         processInterrupt(z80);
         return;
     }
 
+    z80->INTERRUPT_DELAY = false;
+
     if(z80->HALTED){
-        z80->cycles += 1;
+        z80->cycles += 4;
         return;
     }
 
@@ -330,8 +333,10 @@ void z80_step(z80_t* z80){
         }
         switch(x){
             case 0:
-            rotateFunc function = rot[y];
-            (*function)(z80, r[z]);
+            {
+                rotateFunc function = rot[y];
+                (*function)(z80, r[z]);
+            }
             break;
 
             case 1:
@@ -1333,6 +1338,7 @@ void EXX(z80_t* z80){
 }
 
 void JP(z80_t* z80, uint16_t val){
+    uint16_t old_val = z80->PC;
     z80->PC = val;
 }
 
@@ -1381,6 +1387,7 @@ void DI(z80_t* z80){
 }
 
 void EI(z80_t* z80){
+    z80->INTERRUPT_DELAY = true;
     z80->INTERRUPT_ENABLED = true;
 }
 
@@ -1956,6 +1963,9 @@ void INI(z80_t* z80){
     z80->writeMemory(z80, z80->HL, val);
     z80->HL += 1;  
     z80->cycles += 16;
+
+    CHANGE_FLAG(Z, !z80->B);
+    SET_FLAG(N);
 }
 
 void IND(z80_t* z80){
@@ -1964,6 +1974,9 @@ void IND(z80_t* z80){
     z80->writeMemory(z80, z80->HL, val);
     z80->HL -= 1;
     z80->cycles += 16;
+
+    CHANGE_FLAG(Z, !z80->B);
+    SET_FLAG(N);
 }
 
 void INIR(z80_t* z80){
@@ -1994,6 +2007,9 @@ void OUTI(z80_t* z80){
     z80->writeIO(z80, z80->BC, val);
     z80->HL += 1;
     z80->cycles += 16;
+
+    CHANGE_FLAG(Z, !z80->B);
+    SET_FLAG(N);
 }
 
 void OUTD(z80_t* z80){
@@ -2002,6 +2018,9 @@ void OUTD(z80_t* z80){
     z80->writeIO(z80, z80->BC, val);
     z80->HL -= 1;
     z80->cycles += 16;
+
+    CHANGE_FLAG(Z, !z80->B);
+    SET_FLAG(N);
 }
 
 void OTIR(z80_t* z80){
