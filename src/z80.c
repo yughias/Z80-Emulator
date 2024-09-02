@@ -853,7 +853,8 @@ void z80_step(z80_t* z80){
                 z80->cycles += 8;
             else
                 z80->cycles += 4;
-            z80->aux_reg = z80->readMemory(z80, nn);
+            if(z == 6)
+                z80->aux_reg = z80->readMemory(z80, nn);
             aluFunc function = alu[y];
             z80->PC += 1;
             (*function)(z80, &z80->A, *r[z]);
