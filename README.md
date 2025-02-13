@@ -1,9 +1,6 @@
 # Z80-Emulator
 
-This is a simple Z80 emulator written purely in C that passes the following tests:
-- prelim.com
-- zexdoc.cim
-- zexall.com
+This is a simple Z80 emulator written purely in C that passes all the [Z80 Json Tests](https://github.com/SingleStepTests/z80). The behaviour of the secret flag X/Y, Q and WZ is correctly emulated.
 
 To create an instance of your z80, just do the following:
 
