@@ -29,7 +29,7 @@ union { \
 typedef struct z80_t {
     // interrupt vars
     bool     HALTED;
-    bool     INTERRUPT_ENABLED;
+    bool     IFF1, IFF2;
     bool     INTERRUPT_DELAY;
     bool     INTERRUPT_PENDING;
     uint8_t  INTERRUPT_MODE;
@@ -44,6 +44,8 @@ typedef struct z80_t {
     Z80_XY_REG(IX);
     Z80_XY_REG(IY);
 
+    Z80_REG(W, Z);
+
     uint16_t AF_;
     uint16_t BC_;
     uint16_t DE_;
@@ -54,6 +56,8 @@ typedef struct z80_t {
 
     uint8_t I;
     uint8_t R;
+
+    bool Q;
 
     uint8_t aux_reg;
 
@@ -66,9 +70,9 @@ typedef struct z80_t {
     uint64_t cycles;
 } z80_t;
 
-
 void z80_init(z80_t*);
 void z80_print(z80_t*);
 void z80_step(z80_t*);
+void z80_nmi(z80_t*);
 
 #endif
